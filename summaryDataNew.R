@@ -5,33 +5,31 @@
 #' @param dat data.table containing the attribute for visualization
 #' @param selectedVar Visualization attribute name (string)
 #' @param linearPredictor Flag for computing results in linear/link space(Depreciated)
-#' 
+#'
 #' @return List containing the linear and link observed, fitted average, model, and resudual weighted averages for \code{selectedVar}
-#' 
+#'
 #' @examples \dontrun{
 #'     myData <- read.csv("https://stats.idre.ucla.edu/stat/data/binary.csv")
 #'     model <- glm(admit ~gre+rank,data=myData,family = 'binomial')
 #'     summaryDataNew(model,myData,"gre",linearPredictor = TRUE)
 #' }
-#' 
+#'
 #' @author Luke
 #' @importFrom dplyr %>% group_by summarise
 #' @importFrom stats weighted.mean
 #' @importFrom forcats fct_explicit_na
 #' @rawNamespace improt(data.table,except = c(first,melt))
-#' 
+#'
 #' @export
 
-
-
 summaryDataNew <- function(obj,dat,selectedVar,linearPredictor=TRUE){
-    
+
     asNumericFactor <- function(x) {as.numeric(levels(x))[x]}
-    
+
     weight <- NULL
     resp <- NULL
     pred <- NULL
-    
+
     num_var <-setdiff(names(dat),names(dat[,which(sapply(dat,is.factor))]))
     datnew <- data.table(
         var = dat[[selectedVar]],
@@ -39,15 +37,15 @@ summaryDataNew <- function(obj,dat,selectedVar,linearPredictor=TRUE){
         weight = obj$prior.weights,
         pred = obj$fitted.values
     )
-    
+
     if(any(is.na(datnew$var)) && is.factor(datnew$var)){
         datnew$var <- forcats::fct_explicit_na(data$var,'NaN')
     }
-    
+
     uniqueVals <- length(unique(datnew$var))
-    
+
     totalWeight <- sum(datnew$weight)
-    
+
     if(is.numeric(datnew$var) && uniqueVals >250){
         oldValue <- datnew$var
         oldValue[which(datnew$ar <0)] <- NA
@@ -75,10 +73,10 @@ summaryDataNew <- function(obj,dat,selectedVar,linearPredictor=TRUE){
         finalValue[which(is.na(finalValue))] <- datnew$var[which(is.na(finalValue))]
         datnew$var <- finalValue
     }
-    
+
     if(nrow(datnew) <5e6){
         varDF <- datnew %>% group_by(var,.drop=FALSE)
-        
+
         EE <- as.data.table(varDF %>% summarise(average=sum(weight)/totalWeight))
         obs <- as.data.table(varDF %>% summarise(average = obj$family$linkfun(weighted.mean(resp,weight))))
         ca <- as.data.table(varDF %>% summarise(average = obj$family$linkfun(weighted.mean(pred,weight))))
@@ -88,20 +86,20 @@ summaryDataNew <- function(obj,dat,selectedVar,linearPredictor=TRUE){
             res <- res[data.table::data.table("var" = levels(datnew$var)),on=.(var=var)][,EE := ifelse(is.na(EE),0,EE)]
             res[is.na(res)] <- NaN
         }
-        
+
         data.table::setorder(res,var)
-        
+
         EE <- data.table::data.table("var" = res[["var"]],"average" = res[["EE"]])
         obs <- data.table::data.table("var" = res[["var"]],"average" = res[["obs"]])
         ca <- data.table::data.table("var" = res[["var"]], "average" = res[["ca"]])
     }
-    
+
     if(is.null(obj$offset)){
         offset <- 0
     } else {
         offset <- weighted.mean(obj$offset,obj$prior.weights)
     }
-    
+
     if(selectedVar %in% num_var){
         if(selectedVar %in% names(obj$coefficients)){
             numLevs <- obs$var
@@ -129,7 +127,7 @@ summaryDataNew <- function(obj,dat,selectedVar,linearPredictor=TRUE){
                 if(all(InsureR::checkNumeric(coefs$V2))){
                     names(coefs) <- c("level","coefficient")
                     rownames(coefs) <-c()
-                    
+
                     cm <-
                         data.table(x = as.numeric(coefs$level),
                                    y = asNumericFactor(coefs$coefficient) + obj$coefficients[1] +offset)
@@ -142,7 +140,7 @@ summaryDataNew <- function(obj,dat,selectedVar,linearPredictor=TRUE){
                                    y = 0 * temp + obj$coefficients[1] + offset)
                 }
             }
-            
+
             cu <- data.table(x = cm$x,
                              y = cm$y + obs$average - ca$average)
             names(obs) <- c("x","y")
@@ -150,7 +148,7 @@ summaryDataNew <- function(obj,dat,selectedVar,linearPredictor=TRUE){
             names(cm) <- c("x","y")
             names(cu) <- c("x","y")
             names(EE) <- c("x","y")
-            
+
             res <- list(
                 linear = data.frame(
                     x = obs$x,
@@ -169,12 +167,12 @@ summaryDataNew <- function(obj,dat,selectedVar,linearPredictor=TRUE){
                     EE = EE$y
                 )
             )
-            
+
             res$linear[res$linear == -Inf] <- NA
             res$link[res$link == -Inf] <- NA
-            
+
             res$linear[is.na(res$linear)] <- NA
             res$link[is.na(res$link)] <- NA
-            
+
             return(res)
 }
